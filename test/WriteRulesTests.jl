@@ -16,15 +16,23 @@ open("cell_rules.csv", "w") do f
 end
 
 writeRules("./test.xml", "./cell_rules.csv")
+n_rules = readchomp(`grep -c "<signal" ./test.xml`) |> x->parse(Int, x)
+@test n_rules == countlines(IOBuffer(csv_text))
 
+# ----------------------------
 open("cell_rules_empty.csv", "w") do f
     write(f, "")
 end
 
 writeRules("./test_empty.xml", "./cell_rules_empty.csv")
+n_lines = open("./test_empty.xml", "r") do f; countlines(f); end
+@test n_lines == 2 # the encoding line and the </hypothesis_rulesets> line
 
+# ----------------------------
 open("cell_rules_emptyish.csv", "w") do f
     write(f, "//\n")
 end
 
 writeRules("./test_emptyish.xml", "./cell_rules_emptyish.csv")
+n_lines = open("./test_emptyish.xml", "r") do f; countlines(f); end
+@test n_lines == 2 # the encoding line and the </hypothesis_rulesets> line

@@ -162,6 +162,9 @@ end
 function addRules(xml_root::XMLElement, data_frame::DataFrame)
     for row in eachrow(data_frame)
         cell_type = row[:cell_type]
+        if startswith(cell_type, "#") || startswith(cell_type, "//")
+            continue
+        end
         signal_name = row[:signal]
         response = row[:response]
         behavior_name = row[:behavior]
@@ -179,10 +182,10 @@ end
 
 function addRules(xml_root::XMLElement, path_to_csv::String)
     df = CSV.read(path_to_csv, DataFrame; header=false, types=String)
-    if !isempty(df)
-        # set column names of df by vector
-        rename!(df, [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead])
+    if isempty(df) || size(df, 2) != 8
+        return
     end
+    rename!(df, [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead])
     addRules(xml_root, df)
     return
 end

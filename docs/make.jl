@@ -10,11 +10,14 @@ makedocs(;
     format=Documenter.HTML(;
         canonical="https://drbergman.github.io/PhysiCellXMLRules.jl",
         edit_link="main",
-        assets=String[],
+        assets=String[]
     ),
     pages=[
         "Home" => "index.md",
-    ],
+        "Manual" => Any[
+            "Guide" => "man/guide.md"
+        ]
+    ]
 )
 
 deploydocs(;

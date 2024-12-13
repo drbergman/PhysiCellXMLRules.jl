@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+      - development
+      - test*
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -23,10 +25,9 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.11'
-          - '1.10'
-          - '1.9'
-          - 'pre'
+          - 'lts' # long-term support
+          - '1' # to check the latest v1 version
+          - 'pre' # check upcoming releases
         os:
           - ubuntu-latest
         arch:

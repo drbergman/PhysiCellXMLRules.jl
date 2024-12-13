@@ -1,13 +1,13 @@
 module PhysiCellXMLRules
 using LightXML, DataFrames, CSV
 
-export writeRules
+export writeRules, exportRulesToCSV
 
 struct Behavior
-    name::String
+    name::AbstractString
     response::Symbol
-    max_response::String
-    function Behavior(name::String, response::Symbol, max_response::String)
+    max_response::AbstractString
+    function Behavior(name::AbstractString, response::Symbol, max_response::AbstractString)
         if response != :increases && response != :decreases
             throw("The response must be either :increases or :decreases. Got $response.")
         end
@@ -15,28 +15,28 @@ struct Behavior
     end
 end
 
-Behavior(name::String, response::String, max_response::String) = Behavior(name, Symbol(response), max_response)
-Behavior(name::String, response::String) = Behavior(name, Symbol(response), "")
-Behavior(name, response, max_response::Float64) = Behavior(name, response, string(max_response))
+Behavior(name::AbstractString, response::AbstractString, max_response::AbstractString) = Behavior(name, Symbol(response), max_response)
+Behavior(name::AbstractString, response::AbstractString) = Behavior(name, Symbol(response), "")
+Behavior(name, response, max_response::Real) = Behavior(name, response, string(max_response))
 
 struct Signal
-    name::String
-    half_max::String
-    hill_power::String
-    applies_to_dead::String
+    name::AbstractString
+    half_max::AbstractString
+    hill_power::AbstractString
+    applies_to_dead::AbstractString
 end
 
-function Signal(name::String, half_max::Float64, hill_power::T where {T<:Real}, applies_to_dead::Bool)
+function Signal(name::AbstractString, half_max::Real, hill_power::T where {T<:Real}, applies_to_dead::Bool)
     return Signal(name, string(half_max), string(hill_power), applies_to_dead ? "1" : "0" )
 end
 
 struct Rule
-    cell_type::String
+    cell_type::AbstractString
     behavior::Behavior
     signal::Signal
 end
 
-function getElement(parent_element::XMLElement, element_name::String; require_exist::Bool=false)
+function getElement(parent_element::XMLElement, element_name::AbstractString; require_exist::Bool=false)
     ce = find_element(parent_element, element_name)
     if isnothing(ce) && require_exist
         throw("Element '$element_name' not found in parent element '$parent_element'")
@@ -44,14 +44,14 @@ function getElement(parent_element::XMLElement, element_name::String; require_ex
     return ce
 end
 
-function createElement(parent_element::XMLElement, element_name::String; require_new::Bool=true)
+function createElement(parent_element::XMLElement, element_name::AbstractString; require_new::Bool=true)
     if require_new && !isnothing(getElement(parent_element, element_name; require_exist=false))
         throw("Element '$element_name' already exists in parent element '$parent_element'")
     end
     return new_child(parent_element, element_name)
 end
 
-function getOrCreateElement(parent_element::XMLElement, element_name::String)
+function getOrCreateElement(parent_element::XMLElement, element_name::AbstractString)
     ce = getElement(parent_element, element_name; require_exist=false)
     if isnothing(ce)
         ce = createElement(parent_element, element_name; require_new=false) # since we already checked it doesn't exist, don't need it to be new
@@ -59,7 +59,7 @@ function getOrCreateElement(parent_element::XMLElement, element_name::String)
     return ce
 end
 
-function getElementByAttribute(parent_element::XMLElement, element_name::String, attribute_name::String, attribute_value::String; require_exist::Bool=false)
+function getElementByAttribute(parent_element::XMLElement, element_name::AbstractString, attribute_name::AbstractString, attribute_value::AbstractString; require_exist::Bool=false)
     candidate_elements = get_elements_by_tagname(parent_element, element_name)
     for ce in candidate_elements
         if attribute(ce,attribute_name)==attribute_value
@@ -72,7 +72,7 @@ function getElementByAttribute(parent_element::XMLElement, element_name::String,
     return nothing
 end
 
-function createElementByAttribute(parent_element::XMLElement, element_name::String, attribute_name::String, attribute_value::String; require_new::Bool=true)
+function createElementByAttribute(parent_element::XMLElement, element_name::AbstractString, attribute_name::AbstractString, attribute_value::AbstractString; require_new::Bool=true)
     if require_new && !isnothing(getElementByAttribute(parent_element, element_name, attribute_name, attribute_value; require_exist=false))
         throw("$(element_name) already exists with (attribute, value) = ($(attribute_name), $(attribute_value)).") # improve this to name the parent element and the new element name
     end
@@ -81,7 +81,7 @@ function createElementByAttribute(parent_element::XMLElement, element_name::Stri
     return ce
 end
 
-function getOrCreateElementByAttribute(parent_element::XMLElement, element_name::String, attribute_name::String, attribute_value::String)
+function getOrCreateElementByAttribute(parent_element::XMLElement, element_name::AbstractString, attribute_name::AbstractString, attribute_value::AbstractString)
     ce = getElementByAttribute(parent_element, element_name, attribute_name, attribute_value; require_exist=false)
     if isnothing(ce)
         ce = createElementByAttribute(parent_element, element_name, attribute_name, attribute_value; require_new=false) # since we already checked it doesn't exist, don't need it to be new
@@ -89,7 +89,7 @@ function getOrCreateElementByAttribute(parent_element::XMLElement, element_name:
     return ce
 end
 
-function getResponse(xml_root::XMLElement, cell_type::String, behavior::Behavior) # this could be called "getOrCreateResponse", but I don't think it will ever be needed to either only get or only create it
+function getResponse(xml_root::XMLElement, cell_type::AbstractString, behavior::Behavior) # this could be called "getOrCreateResponse", but I don't think it will ever be needed to either only get or only create it
     response_signals = (behavior.response == :decreases) ? "decreasing_signals" : "increasing_signals"
     cell_type_element = getOrCreateElementByAttribute(xml_root, "hypothesis_ruleset", "name", cell_type)
     behavior_element = getOrCreateElementByAttribute(cell_type_element, "behavior", "name", behavior.name)
@@ -180,7 +180,7 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
     return
 end
 
-function addRules(xml_root::XMLElement, path_to_csv::String)
+function addRules(xml_root::XMLElement, path_to_csv::AbstractString)
     df = CSV.read(path_to_csv, DataFrame; header=false, types=String)
     if isempty(df) || size(df, 2) != 8
         return
@@ -190,17 +190,87 @@ function addRules(xml_root::XMLElement, path_to_csv::String)
     return
 end
 
-function writeRules(xml_doc::XMLDocument, path_to_csv::String)
+function writeRules(xml_doc::XMLDocument, path_to_csv::AbstractString)
     xml_root = create_root(xml_doc, "hypothesis_rulesets")
     addRules(xml_root, path_to_csv)
     return xml_doc
 end
 
-function writeRules(path_to_xml::String, path_to_csv::String)
+"""
+`writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)`
+Write the rules from the CSV file at `path_to_csv` to the XML file at `path_to_xml`.
+Note: this is not the inverse of `exportRulesToCSV` as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
+"""
+function writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)
     xml_doc = XMLDocument()
     writeRules(xml_doc, path_to_csv)
     save_file(xml_doc, path_to_xml)
+    free(xml_doc)
     return
+end
+
+"""
+`exportRulesToCSV(path_to_csv::AbstractString, path_to_xml::AbstractString)`
+Export the rules from the XML file at `path_to_xml` to the CSV file at `path_to_csv`.
+Note: this is not the inverse of `writeRules` as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
+"""
+function exportRulesToCSV(path_to_csv::AbstractString, path_to_xml::AbstractString)
+    xml_doc = parse_file(path_to_xml)
+    xml_root = root(xml_doc)
+    open(path_to_csv, "w") do io
+        println(io, "// XML Rules Export")
+        println(io, "// cell_type,signal,response,behavior,max_response,half_max,hill_power,applies_to_dead\n")
+    end
+    for hypothesis_ruleset in get_elements_by_tagname(xml_root, "hypothesis_ruleset")
+        exportCellToCSV(path_to_csv, hypothesis_ruleset)
+    end
+    free(xml_doc)
+end
+
+function exportCellToCSV(path_to_csv::AbstractString, hypothesis_ruleset::XMLElement)
+    cell_type = attribute(hypothesis_ruleset, "name")
+    printlnToCSV(path_to_csv, "// $cell_type")
+    for behavior in get_elements_by_tagname(hypothesis_ruleset, "behavior")
+        exportBehaviorToCSV(path_to_csv, cell_type, behavior)
+    end
+    printlnToCSV(path_to_csv, "")
+end
+
+function exportBehaviorToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior::XMLElement)
+    behavior_name = attribute(behavior, "name")
+    printlnToCSV(path_to_csv, "  // $behavior_name")
+    decreasing_signals_element = find_element(behavior, "decreasing_signals")
+    if !isnothing(decreasing_signals_element)
+        max_response = content(find_element(decreasing_signals_element, "max_response"))
+        printlnToCSV(path_to_csv, "    // decreasing to $max_response")
+        exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, decreasing_signals_element, :decreases)
+        printlnToCSV(path_to_csv, "")
+    end
+    increasing_signals_element = find_element(behavior, "increasing_signals")
+    if !isnothing(increasing_signals_element)
+        max_response = content(find_element(increasing_signals_element, "max_response"))
+        printlnToCSV(path_to_csv, "    // increasing to $max_response")
+        exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, increasing_signals_element, :increases)
+        printlnToCSV(path_to_csv, "")
+    end
+    printlnToCSV(path_to_csv, "")
+end
+
+function exportSignalsToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior_name::AbstractString, max_response::AbstractString, signals_element::XMLElement, response::Symbol)
+    for signal in get_elements_by_tagname(signals_element, "signal")
+        signal_name = attribute(signal, "name")
+        half_max = content(find_element(signal, "half_max"))
+        hill_power = content(find_element(signal, "hill_power"))
+        applies_to_dead = content(find_element(signal, "applies_to_dead"))
+        row = (cell_type, signal_name, response, behavior_name, max_response, half_max, hill_power, applies_to_dead)
+        printlnToCSV(path_to_csv, join(row, ","))
+    end
+end
+
+function printlnToCSV(path_to_csv::AbstractString, line::AbstractString)
+    open(path_to_csv, "a") do io
+        println(io, line)
+    end
 end
 
 end

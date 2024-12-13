@@ -1,15 +1,8 @@
 using PhysiCellXMLRules
 
 function compare_csvs(csv_original::AbstractString, csv_exported::AbstractString)
-    csv_original_text = String[]
-    open(csv_original, "r") do f
-        global csv_original_text = readlines(f)
-    end
-
-    csv_exported_test = String[]
-    open(csv_exported, "r") do f
-        global csv_exported_test = readlines(f)
-    end
+    csv_original_text = readlines(csv_original)
+    csv_exported_test = readlines(csv_exported)
 
     for line in csv_original_text
         @test line in csv_exported_test

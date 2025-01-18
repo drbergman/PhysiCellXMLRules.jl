@@ -5,12 +5,15 @@ function compare_csvs(csv_original::AbstractString, csv_exported::AbstractString
     csv_exported_test = readlines(csv_exported)
 
     for line in csv_original_text
+        if isempty(line) || startswith(line, "//")
+            continue
+        end
         @test line in csv_exported_test
     end
     
     for line in csv_exported_test
         line = lstrip(line)
-        if startswith(line, "//")
+        if isempty(line) || startswith(line, "//")
             continue
         end
         @test line in csv_original_text
@@ -24,7 +27,7 @@ xml_csv_pairs = [
 ]
 
 for (path_to_xml, path_to_original_csv) in xml_csv_pairs
-    path_to_csv = "$(split(path_to_original_csv, ".")[1])_exported.csv"
+    path_to_csv = "$(split(path_to_original_csv, ".csv")[1])_exported.csv"
     exportRulesToCSV(path_to_csv, path_to_xml)
     compare_csvs(path_to_original_csv, path_to_csv)
 end

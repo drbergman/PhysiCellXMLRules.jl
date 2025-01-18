@@ -3,13 +3,30 @@ using LightXML, DataFrames, CSV
 
 export writeRules, exportRulesToCSV
 
+"""
+    standardizeCustomName(name::AbstractString)
+
+If the name for a signal or behavior starts with "custom:", use the synonym "custom <name>" instead.
+
+pcvct uses `:` to use attributes to specify elements in an XML path. So, we use `custom <name>` to avoid incorrect splitting on `:`.
+"""
+function standardizeCustomName(name)
+    if !startswith(name, "custom:")
+        return name
+    end
+    # store all custom behaviors as "custom <name>" to only use `:` for indicating attribute on xml paths
+    name = name[8:end] |> lstrip
+    return "custom $name"
+end
+
 struct Behavior
     name::AbstractString
     response::Symbol
     max_response::AbstractString
     function Behavior(name::AbstractString, response::Symbol, max_response::AbstractString)
+        name = standardizeCustomName(name)
         if response != :increases && response != :decreases
-            throw("The response must be either :increases or :decreases. Got $response.")
+            throw("The response must be either :increases or :decreases. Got $response for $name.")
         end
         new(name, response, max_response)
     end
@@ -24,6 +41,10 @@ struct Signal
     half_max::AbstractString
     hill_power::AbstractString
     applies_to_dead::AbstractString
+    function Signal(name::AbstractString, half_max::AbstractString, hill_power::AbstractString, applies_to_dead::AbstractString)
+        name = standardizeCustomName(name)
+        new(name, half_max, hill_power, applies_to_dead)
+    end
 end
 
 function Signal(name::AbstractString, half_max::Real, hill_power::T where {T<:Real}, applies_to_dead::Bool)
@@ -197,9 +218,11 @@ function writeRules(xml_doc::XMLDocument, path_to_csv::AbstractString)
 end
 
 """
-`writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)`
+    writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)
+
 Write the rules from the CSV file at `path_to_csv` to the XML file at `path_to_xml`.
-Note: this is not the inverse of `exportRulesToCSV` as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
+
+Note: this is not the inverse of [`exportRulesToCSV`](@ref) as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
 """
 function writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)
     xml_doc = XMLDocument()
@@ -210,9 +233,11 @@ function writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)
 end
 
 """
-`exportRulesToCSV(path_to_csv::AbstractString, path_to_xml::AbstractString)`
+    exportRulesToCSV(path_to_csv::AbstractString, path_to_xml::AbstractString)
+
 Export the rules from the XML file at `path_to_xml` to the CSV file at `path_to_csv`.
-Note: this is not the inverse of `writeRules` as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
+
+Note: this is not the inverse of [`writeRules`](@ref) as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
 """
 function exportRulesToCSV(path_to_csv::AbstractString, path_to_xml::AbstractString)
     xml_doc = parse_file(path_to_xml)
@@ -237,7 +262,7 @@ function exportCellToCSV(path_to_csv::AbstractString, hypothesis_ruleset::XMLEle
 end
 
 function exportBehaviorToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior::XMLElement)
-    behavior_name = attribute(behavior, "name")
+    behavior_name = attribute(behavior, "name") |> standardizeCustomNameExport
     printlnToCSV(path_to_csv, "  // $behavior_name")
     decreasing_signals_element = find_element(behavior, "decreasing_signals")
     if !isnothing(decreasing_signals_element)
@@ -258,7 +283,7 @@ end
 
 function exportSignalsToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior_name::AbstractString, max_response::AbstractString, signals_element::XMLElement, response::Symbol)
     for signal in get_elements_by_tagname(signals_element, "signal")
-        signal_name = attribute(signal, "name")
+        signal_name = attribute(signal, "name") |> standardizeCustomNameExport
         half_max = content(find_element(signal, "half_max"))
         hill_power = content(find_element(signal, "hill_power"))
         applies_to_dead = content(find_element(signal, "applies_to_dead"))
@@ -271,6 +296,20 @@ function printlnToCSV(path_to_csv::AbstractString, line::AbstractString)
     open(path_to_csv, "a") do io
         println(io, line)
     end
+end
+
+"""
+    standardizeCustomNameExport(name::AbstractString)
+
+If the name for a signal or behavior starts with "custom ", use the synonym "custom:<name>" instead when exporting to a CSV.
+
+Both are acceptable, but this function will convert it to the more standard format in PhysiCell.
+"""
+function standardizeCustomNameExport(name)
+    if !startswith(name, "custom ")
+        return name
+    end
+    return "custom:" * lstrip(name[8:end])
 end
 
 end

@@ -152,9 +152,6 @@ end
 function addRules(xml_root::XMLElement, data_frame::DataFrame)
     for row in eachrow(data_frame)
         cell_type = row[:cell_type]
-        if startswith(cell_type, "#") || startswith(cell_type, "//")
-            continue
-        end
         signal_name = row[:signal]
         response = row[:response]
         behavior_name = row[:behavior]
@@ -162,6 +159,7 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
         half_max = row[:half_max]
         hill_power = row[:hill_power]
         applies_to_dead = row[:applies_to_dead]
+        @assert !ismissing(applies_to_dead) "The following CSV row is missing applies_to_dead. The row is likely missing a column:\n\t$(join(row, ","))"
         behavior = Behavior(behavior_name, response, max_response)
         signal = Signal(signal_name, half_max, hill_power, applies_to_dead)
         rule = Rule(cell_type, behavior, signal)
@@ -171,11 +169,11 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
 end
 
 function addRules(xml_root::XMLElement, path_to_csv::AbstractString)
-    df = CSV.read(path_to_csv, DataFrame; header=false, types=String)
-    if isempty(df) || size(df, 2) != 8
+    header = [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead]
+    df = CSV.read(path_to_csv, DataFrame; header=header, types=String, comment="//")
+    if isempty(df)
         return
     end
-    rename!(df, [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead])
     addRules(xml_root, df)
     return
 end
@@ -232,22 +230,19 @@ end
 
 function exportBehaviorToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior::XMLElement)
     behavior_name = attribute(behavior, "name") |> standardizeCustomNameExport
-    printlnToCSV(path_to_csv, "  // $behavior_name")
+    printlnToCSV(path_to_csv, "// └─$behavior_name")
     decreasing_signals_element = find_element(behavior, "decreasing_signals")
     if !isnothing(decreasing_signals_element)
         max_response = content(find_element(decreasing_signals_element, "max_response"))
-        printlnToCSV(path_to_csv, "    // decreasing to $max_response")
+        printlnToCSV(path_to_csv, "//   └─decreasing to $max_response")
         exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, decreasing_signals_element, :decreases)
-        printlnToCSV(path_to_csv, "")
     end
     increasing_signals_element = find_element(behavior, "increasing_signals")
     if !isnothing(increasing_signals_element)
         max_response = content(find_element(increasing_signals_element, "max_response"))
-        printlnToCSV(path_to_csv, "    // increasing to $max_response")
+        printlnToCSV(path_to_csv, "//   └─increasing to $max_response")
         exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, increasing_signals_element, :increases)
-        printlnToCSV(path_to_csv, "")
     end
-    printlnToCSV(path_to_csv, "")
 end
 
 function exportSignalsToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior_name::AbstractString, max_response::AbstractString, signals_element::XMLElement, response::Symbol)

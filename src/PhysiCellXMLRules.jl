@@ -23,18 +23,17 @@ struct Behavior
     name::AbstractString
     response::Symbol
     max_response::AbstractString
+    function Behavior(name::AbstractString, response::AbstractString, max_response::AbstractString)
+        return Behavior(name, Symbol(response), max_response)
+    end
     function Behavior(name::AbstractString, response::Symbol, max_response::AbstractString)
         name = standardizeCustomName(name)
         if response != :increases && response != :decreases
-            throw("The response must be either :increases or :decreases. Got $response for $name.")
+            throw(ArgumentError("The response must be either :increases or :decreases. Got $response for $name."))
         end
         new(name, response, max_response)
     end
 end
-
-Behavior(name::AbstractString, response::AbstractString, max_response::AbstractString) = Behavior(name, Symbol(response), max_response)
-Behavior(name::AbstractString, response::AbstractString) = Behavior(name, Symbol(response), "")
-Behavior(name, response, max_response::Real) = Behavior(name, response, string(max_response))
 
 struct Signal
     name::AbstractString
@@ -47,10 +46,6 @@ struct Signal
     end
 end
 
-function Signal(name::AbstractString, half_max::Real, hill_power::T where {T<:Real}, applies_to_dead::Bool)
-    return Signal(name, string(half_max), string(hill_power), applies_to_dead ? "1" : "0" )
-end
-
 struct Rule
     cell_type::AbstractString
     behavior::Behavior
@@ -60,14 +55,14 @@ end
 function getElement(parent_element::XMLElement, element_name::AbstractString; require_exist::Bool=false)
     ce = find_element(parent_element, element_name)
     if isnothing(ce) && require_exist
-        throw("Element '$element_name' not found in parent element '$parent_element'")
+        throw(ArgumentError("Element '$element_name' not found in parent element '$parent_element'"))
     end
     return ce
 end
 
 function createElement(parent_element::XMLElement, element_name::AbstractString; require_new::Bool=true)
     if require_new && !isnothing(getElement(parent_element, element_name; require_exist=false))
-        throw("Element '$element_name' already exists in parent element '$parent_element'")
+        throw(ArgumentError("Element '$element_name' already exists in parent element '$parent_element'"))
     end
     return new_child(parent_element, element_name)
 end
@@ -88,14 +83,14 @@ function getElementByAttribute(parent_element::XMLElement, element_name::Abstrac
         end
     end
     if require_exist
-        throw("Element '$element_name' not found in parent element '$parent_element' with attribute '$attribute_name' = '$attribute_value'")
+        throw(ArgumentError("Element '$element_name' not found in parent element '$parent_element' with attribute '$attribute_name' = '$attribute_value'"))
     end
     return nothing
 end
 
 function createElementByAttribute(parent_element::XMLElement, element_name::AbstractString, attribute_name::AbstractString, attribute_value::AbstractString; require_new::Bool=true)
     if require_new && !isnothing(getElementByAttribute(parent_element, element_name, attribute_name, attribute_value; require_exist=false))
-        throw("$(element_name) already exists with (attribute, value) = ($(attribute_name), $(attribute_value)).") # improve this to name the parent element and the new element name
+        throw(ArgumentError("$(element_name) already exists with (attribute, value) = ($(attribute_name), $(attribute_value)).")) # improve this to name the parent element and the new element name
     end
     ce = new_child(parent_element, element_name)
     set_attribute(ce, attribute_name, attribute_value)
@@ -123,12 +118,6 @@ function addSignal(response_element::XMLElement, signal::Signal)
     return signal_element
 end
 
-function updateSignal(response_element::XMLElement, signal::Signal; require_exist::Bool=true)
-    signal_element = getElementByAttribute(response_element, "signal", "name", signal.name; require_exist=require_exist)
-    setSignalParameters(signal_element, signal)
-    return signal_element
-end
-
 function setSignalParameters(signal_element::XMLElement, signal::Signal)
     half_max_element = getOrCreateElement(signal_element, "half_max")
     set_content(half_max_element, signal.half_max)
@@ -152,7 +141,7 @@ function addRule(xml_root::XMLElement, rule::Rule; require_max_response_unchange
         previous_max_response = parse(Float64, max_response)
         if previous_max_response == parse(Float64, rule.behavior.max_response)
         elseif require_max_response_unchanged
-            throw("In adding the new rule, the max_response is being changed")
+            throw(ArgumentError("In adding the new rule, the max_response is being changed"))
         else
             set_content(max_response_element, rule.behavior.max_response)
         end
@@ -160,32 +149,9 @@ function addRule(xml_root::XMLElement, rule::Rule; require_max_response_unchange
     addSignal(response_element, signal)
 end
 
-function updateRule(xml_root::XMLElement, rule::Rule)
-    cell_type = rule.cell_type
-    behavior = rule.behavior
-    signal = rule.signal
-    response_element = getResponse(xml_root, cell_type, behavior)
-    max_response_element = getElement(response_element, "max_response"; require_exist=true)
-    set_content(max_response_element, rule.behavior.max_response)
-    updateSignal(response_element, signal; require_exist=true)
-end
-
-function addOrUpdateRule(xml_root::XMLElement, rule::Rule)
-    cell_type = rule.cell_type
-    behavior = rule.behavior
-    signal = rule.signal
-    response_element = getResponse(xml_root, cell_type, behavior)
-    max_response_element = getElement(response_element, "max_response"; require_exist=false)
-    set_content(max_response_element, rule.behavior.max_response)
-    updateSignal(response_element, signal; require_exist=false)
-end
-
 function addRules(xml_root::XMLElement, data_frame::DataFrame)
     for row in eachrow(data_frame)
         cell_type = row[:cell_type]
-        if startswith(cell_type, "#") || startswith(cell_type, "//")
-            continue
-        end
         signal_name = row[:signal]
         response = row[:response]
         behavior_name = row[:behavior]
@@ -193,6 +159,7 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
         half_max = row[:half_max]
         hill_power = row[:hill_power]
         applies_to_dead = row[:applies_to_dead]
+        @assert !ismissing(applies_to_dead) "The following CSV row is missing applies_to_dead. The row is likely missing a column:\n\t$(join(row, ","))"
         behavior = Behavior(behavior_name, response, max_response)
         signal = Signal(signal_name, half_max, hill_power, applies_to_dead)
         rule = Rule(cell_type, behavior, signal)
@@ -202,11 +169,11 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
 end
 
 function addRules(xml_root::XMLElement, path_to_csv::AbstractString)
-    df = CSV.read(path_to_csv, DataFrame; header=false, types=String)
-    if isempty(df) || size(df, 2) != 8
+    header = [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead]
+    df = CSV.read(path_to_csv, DataFrame; header=header, types=String, comment="//")
+    if isempty(df)
         return
     end
-    rename!(df, [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead])
     addRules(xml_root, df)
     return
 end
@@ -263,22 +230,19 @@ end
 
 function exportBehaviorToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior::XMLElement)
     behavior_name = attribute(behavior, "name") |> standardizeCustomNameExport
-    printlnToCSV(path_to_csv, "  // $behavior_name")
+    printlnToCSV(path_to_csv, "// └─$behavior_name")
     decreasing_signals_element = find_element(behavior, "decreasing_signals")
     if !isnothing(decreasing_signals_element)
         max_response = content(find_element(decreasing_signals_element, "max_response"))
-        printlnToCSV(path_to_csv, "    // decreasing to $max_response")
+        printlnToCSV(path_to_csv, "//   └─decreasing to $max_response")
         exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, decreasing_signals_element, :decreases)
-        printlnToCSV(path_to_csv, "")
     end
     increasing_signals_element = find_element(behavior, "increasing_signals")
     if !isnothing(increasing_signals_element)
         max_response = content(find_element(increasing_signals_element, "max_response"))
-        printlnToCSV(path_to_csv, "    // increasing to $max_response")
+        printlnToCSV(path_to_csv, "//   └─increasing to $max_response")
         exportSignalsToCSV(path_to_csv, cell_type, behavior_name, max_response, increasing_signals_element, :increases)
-        printlnToCSV(path_to_csv, "")
     end
-    printlnToCSV(path_to_csv, "")
 end
 
 function exportSignalsToCSV(path_to_csv::AbstractString, cell_type::AbstractString, behavior_name::AbstractString, max_response::AbstractString, signals_element::XMLElement, response::Symbol)

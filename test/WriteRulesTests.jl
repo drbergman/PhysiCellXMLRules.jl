@@ -71,7 +71,7 @@ end
 
 writeXMLRules("./test_advanced.xml", "./cell_rules_advanced.csv")
 
-#! test hiearchical rules
+#! test hierarchical rules
 advanced_xml_doc = XMLDocument()
 xml_root = create_root(advanced_xml_doc, "behavior_rulesets")
 

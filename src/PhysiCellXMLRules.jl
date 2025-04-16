@@ -169,6 +169,8 @@ function addRules(xml_root::XMLElement, data_frame::DataFrame)
 end
 
 function addRules(xml_root::XMLElement, path_to_csv::AbstractString)
+    @assert splitext(path_to_csv)[2] == ".csv" "The path to the CSV file must end with .csv. Got $(path_to_csv)"
+    @assert isfile(path_to_csv) "The path to the CSV file must be a file. $(path_to_csv) is not a file."
     header = [:cell_type, :signal, :response, :behavior, :max_response, :half_max, :hill_power, :applies_to_dead]
     df = CSV.read(path_to_csv, DataFrame; header=header, types=String, comment="//")
     if isempty(df)
@@ -191,7 +193,9 @@ Write the rules from the CSV file at `path_to_csv` to the XML file at `path_to_x
 
 Note: this is not the inverse of [`exportRulesToCSV`](@ref) as `writeRules` discards comments in the original CSV and `exportRulesToCSV` adds comments to the exported CSV file.
 """
-function writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString)
+function writeRules(path_to_xml::AbstractString, path_to_csv::AbstractString; force::Bool=false)
+    @assert splitext(path_to_xml)[2] == ".xml" "The path to the XML file must end with .xml. Got $(path_to_xml)"
+    @assert force || !isfile(path_to_xml) "The path to the XML file must not exist. $(path_to_xml) is a file. Use writeRules(...; force=true) to overwrite it."
     xml_doc = XMLDocument()
     writeRules(xml_doc, path_to_csv)
     save_file(xml_doc, path_to_xml)

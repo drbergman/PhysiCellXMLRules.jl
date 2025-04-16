@@ -28,11 +28,12 @@ function exportCSVRules(path_to_csv::AbstractString, path_to_xml::AbstractString
     println(io, "// cell_type,(s₁) signal (s₂),response (s₃),behavior,max_response,p₁,p₂,applies_to_dead")
     println(io, "// s₁: if 'decreasing', then as the signal decreases, the behavior <response>; (s₁) omitted if 'increasing'")
     println(io, "// s₂: if 'from <value>', then the signal affects the behavior from <value> onwards (depending on s₁); omitted implies 'from 0.0'")
-    println(io, "// s₃: the type of function (one of 'partial_hill', 'hill', 'linear', 'heaviside'); (s₃) omitted if 'partial_hill'")
+    println(io, "// s₃: the type of function (one of 'partial_hill', 'hill', 'identity', 'linear', 'heaviside'); (s₃) omitted if 'partial_hill'")
     println(io, "// pᵢ: the parameters for the function:")
     println(io, "//   - half_max and hill_power for partial_hill and hill")
+    println(io, "//   - none for identity; leave both empty, i.e. '<max_response>,,,<applies_to_dead>'")
     println(io, "//   - signal_min and signal_max for linear")
-    println(io, "//   - threshold for heaviside; leave p₂ empty, i.e. '...,<threshold>,,...'")
+    println(io, "//   - threshold for heaviside; leave p₂ empty, i.e. '...,<threshold>,,<applies_to_dead>'")
     println(io, "/" ^ 130 * "\n\n")
 
     for behavior_ruleset in get_elements_by_tagname(xml_root, "behavior_ruleset")
@@ -108,13 +109,15 @@ function exportAggregatorToCSV(io::IO, cell_type::AbstractString, behavior_name:
         if isnothing(signal_type)
             signal_type = "partial_hill"
         else
-            @assert signal_type in ["partial_hill", "hill", "linear", "heaviside"] "Found signal type $(signal_type) in XML for cell type $(cell_type) in behavior $(behavior_name) and signal $(signal_name)."
+            @assert signal_type in ["partial_hill", "hill", "identity", "linear", "heaviside"] "Found signal type $(signal_type) in XML for cell type $(cell_type) in behavior $(behavior_name) and signal $(signal_name)."
         end
         
         if signal_type == "partial_hill"
             exportPartialHillSignalToCSV(io, cell_type, signal, signal_name, response, behavior_name, max_response)
         elseif signal_type == "hill"
             exportHillSignalToCSV(io, cell_type, signal, signal_name, response, behavior_name, max_response)
+        elseif signal_type == "identity"
+            exportIdentitySignalToCSV(io, cell_type, signal, signal_name, response, behavior_name, max_response)
         elseif signal_type == "linear"
             exportLinearSignalToCSV(io, cell_type, signal, signal_name, response, behavior_name, max_response)
         elseif signal_type == "heaviside"
@@ -138,6 +141,13 @@ function exportHillSignalToCSV(io::IO, cell_type::AbstractString, signal::XMLEle
     applies_to_dead = content(find_element(signal, "applies_to_dead"))
     signal_name = parseSignalReference(signal_name, signal)
     row = (cell_type, signal_name, "$response (hill)", behavior_name, max_response, half_max, hill_power, _booleanToBinary(applies_to_dead))
+    println(io, join(row, ","))
+end
+
+function exportIdentitySignalToCSV(io::IO, cell_type::AbstractString, signal::XMLElement, signal_name::String, response::Symbol, behavior_name::AbstractString, max_response::AbstractString)
+    applies_to_dead = content(find_element(signal, "applies_to_dead"))
+    signal_name = parseSignalReference(signal_name, signal)
+    row = (cell_type, signal_name, "$response (identity)", behavior_name, max_response, "", "", _booleanToBinary(applies_to_dead))
     println(io, join(row, ","))
 end
 

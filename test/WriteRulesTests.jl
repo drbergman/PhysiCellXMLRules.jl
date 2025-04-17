@@ -63,6 +63,7 @@ cell_type_1,oxygen (from 15.0),decreases (hill),custom:glucose,2.0,20.0,4.0,0
 cell_type_2,pressure,increases (linear),cycle entry,0.1,0.5,1.2,0
 cell_type_3,(decreasing) custom:sample,increases (heaviside),migration speed,0.1,0.5,,0
 cell_type_3,(decreasing) custom:sample,increases (heaviside),migration speed,0.1,0.5,,0
+cell_type_4,(decreasing) custom:sample (from 2.0),increases (identity),migration speed,0.1,,,0
 """
 
 open("cell_rules_advanced.csv", "w") do f

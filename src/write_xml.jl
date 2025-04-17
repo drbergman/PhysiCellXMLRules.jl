@@ -52,30 +52,53 @@ end
 
 abstract type ElementarySignal <: AbstractSignal end
 abstract type RelativeSignal <: ElementarySignal end
+abstract type AbstractHillSignal <: RelativeSignal end
 abstract type AbsoluteSignal <: ElementarySignal end
 
-struct HillTypeSignal <: RelativeSignal
-    name::String
+struct HillTypeParameters
     half_max::Float64
     hill_power::Float64
+end
+
+struct HillSignal <: AbstractHillSignal
+    name::String
+    p::HillTypeParameters
     applies_to_dead::Bool
-    type::String
     reference::Union{Nothing,SignalReference}
-    function HillTypeSignal(name::AbstractString, half_max::Real, hill_power::Real, applies_to_dead::Bool, type::AbstractString="partial_hill", reference::Union{Nothing,SignalReference}=nothing)
-        @assert type in ["partial_hill", "hill", "PartialHill", "Hill", "partial hill", "partialhill"] "type must be either 'partial_hill' or 'hill'"
+    function HillSignal(name::AbstractString, half_max::Real, hill_power::Real, applies_to_dead::Bool, reference::Union{Nothing,SignalReference}=nothing)
         validateReference(reference, half_max)
         name = standardizeCustomName(name)
-        new(name, half_max, hill_power, applies_to_dead, type, reference)
+        p = HillTypeParameters(half_max, hill_power)
+        new(name, p, applies_to_dead, reference)
     end
 end
 
-function PartialHillSignal(name::AbstractString, half_max::Real, hill_power::Real, applies_to_dead::Bool, reference::Union{Nothing,SignalReference}=nothing)
-    return HillTypeSignal(name, half_max, hill_power, applies_to_dead, "partial_hill", reference)
+type(::HillSignal) = "hill"
+
+struct PartialHillSignal <: AbstractHillSignal
+    name::String
+    p::HillTypeParameters
+    applies_to_dead::Bool
+    reference::Union{Nothing,SignalReference}
+    function PartialHillSignal(name::AbstractString, half_max::Real, hill_power::Real, applies_to_dead::Bool, reference::Union{Nothing,SignalReference}=nothing)
+        validateReference(reference, half_max)
+        name = standardizeCustomName(name)
+        p = HillTypeParameters(half_max, hill_power)
+        new(name, p, applies_to_dead, reference)
+    end
 end
 
-function HillSignal(name::AbstractString, half_max::Real, hill_power::Real, applies_to_dead::Bool, reference::Union{Nothing,SignalReference}=nothing)
-    return HillTypeSignal(name, half_max, hill_power, applies_to_dead, "hill", reference)
-end
+type(::PartialHillSignal) = "partial_hill"
+
+struct IdentitySignal <: RelativeSignal
+    name::String
+    applies_to_dead::Bool
+    reference::Union{Nothing,SignalReference}
+    function IdentitySignal(name::AbstractString, applies_to_dead::Bool, reference::Union{Nothing,SignalReference}=nothing)
+        name = standardizeCustomName(name)
+        new(name, applies_to_dead, reference)
+    end
+end    
 
 struct LinearSignal <: AbsoluteSignal
     name::String
@@ -201,11 +224,15 @@ function addRules!(xml_root::XMLElement, df::DataFrame)
         applies_to_dead = row[:applies_to_dead]
         @assert !ismissing(applies_to_dead) "The following CSV row is missing applies_to_dead. The row is likely missing a column:\n\t$(join(row, ","))"
 
-        signal_is_relative = signal_type in [PartialHillSignal, HillSignal]
-        @assert signal_is_relative || signal_type in [LinearSignal, HeavisideSignal] "signal type must be either a PartialHillSignal, HillSignal, LinearSignal, or HeavisideSignal. Found $(signal_type) for cell_type $(cell_type) and signal name $(signal_name)"
+        signal_is_relative = signal_type <: RelativeSignal
+        @assert signal_is_relative || signal_type <: AbsoluteSignal "signal type must be either a PartialHillSignal, HillSignal, IdentitySignal, LinearSignal, or HeavisideSignal. Found $(signal_type) for cell_type $(cell_type) and signal name $(signal_name)"
         @assert isnothing(reference) || signal_is_relative "signal type must be a RelativeSignal if a reference is provided"
-        if signal_is_relative
+        if signal_type <: AbstractHillSignal
             signal = signal_type(signal_name, par_1, par_2, applies_to_dead, reference)
+        elseif signal_type == IdentitySignal
+            @assert ismissing(par_1) "Identity signal does not take any parameters. Found p₁=$(par_1)."
+            @assert ismissing(par_2) "Identity signal does not take any parameters. Found p₂=$(par_2)."
+            signal = signal_type(signal_name, applies_to_dead, reference)
         elseif signal_type == LinearSignal
             signal = signal_type(signal_name, par_1, par_2, applies_to_dead, reference_type)
         elseif signal_type == HeavisideSignal
@@ -336,10 +363,15 @@ end
 
 fillSignalElement!(e::XMLElement, signal::AbsoluteSignal) = finishFillSignalElement!(e, signal)
 
-function finishFillSignalElement!(e::XMLElement, signal::HillTypeSignal)
-    validateOrWriteAttribute!(e, "type", signal.type)
-    validateOrWriteElement!(e, "half_max", signal.half_max)
-    validateOrWriteElement!(e, "hill_power", signal.hill_power)
+function finishFillSignalElement!(e::XMLElement, signal::AbstractHillSignal)
+    validateOrWriteAttribute!(e, "type", type(signal))
+    validateOrWriteElement!(e, "half_max", signal.p.half_max)
+    validateOrWriteElement!(e, "hill_power", signal.p.hill_power)
+    return
+end
+
+function finishFillSignalElement!(e::XMLElement, signal::IdentitySignal)
+    validateOrWriteAttribute!(e, "type", "identity")
     return
 end
 
